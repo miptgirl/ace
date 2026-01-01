@@ -17,7 +17,7 @@ class Curator:
     merging, and deleting bullets based on reflection feedback.
     """
     
-    def __init__(self, api_client, api_provider, model: str, max_tokens: int = 4096):
+    def __init__(self, api_client, api_provider, model: str, max_tokens: int = 4096, temperature: float = 0.0):
         """
         Initialize the Curator agent.
         
@@ -26,11 +26,37 @@ class Curator:
             api_provider: API provider for LLM calls
             model: Model name to use for curation
             max_tokens: Maximum tokens for curation
+            temperature: Temperature for generation (0.0 to 1.0)
         """
         self.api_client = api_client
         self.api_provider = api_provider
         self.model = model
         self.max_tokens = max_tokens
+        self.temperature = temperature
+    
+    def _extract_sections_from_playbook(self, playbook: str) -> List[str]:
+        """
+        Extract section names from the playbook.
+        
+        Args:
+            playbook: The playbook text
+            
+        Returns:
+            List of section names (lowercase with underscores)
+        """
+        sections = []
+        for line in playbook.split('\n'):
+            if line.strip().startswith('##'):
+                # Extract section name and normalize it
+                section_header = line.strip()[2:].strip()
+                section_name = section_header.lower().replace(' ', '_').replace('&', 'and')
+                sections.append(section_name)
+        
+        # If no sections found, return default sections
+        if not sections:
+            sections = ["general", "others"]
+        
+        return sections
     
     def curate(
         self,
@@ -70,6 +96,10 @@ class Curator:
         # Format playbook stats as JSON string
         stats_str = json.dumps(playbook_stats, indent=2)
         
+        # Extract available sections from playbook
+        available_sections = self._extract_sections_from_playbook(current_playbook)
+        sections_str = "\n".join(f"- {section}" for section in available_sections)
+        
         # Select the appropriate prompt
         if use_ground_truth:
             prompt = CURATOR_PROMPT.format(
@@ -79,7 +109,8 @@ class Curator:
                 playbook_stats=stats_str,
                 recent_reflection=recent_reflection,
                 current_playbook=current_playbook,
-                question_context=question_context
+                question_context=question_context,
+                available_sections=sections_str
             )
         else:
             prompt = CURATOR_PROMPT_NO_GT.format(
@@ -89,7 +120,8 @@ class Curator:
                 playbook_stats=stats_str,
                 recent_reflection=recent_reflection,
                 current_playbook=current_playbook,
-                question_context=question_context
+                question_context=question_context,
+                available_sections=sections_str
             )
         
         # Make the LLM call
@@ -102,7 +134,8 @@ class Curator:
             call_id=call_id,
             max_tokens=self.max_tokens,
             log_dir=log_dir,
-            use_json_mode=use_json_mode
+            use_json_mode=use_json_mode,
+            temperature=self.temperature
         )
         
         # Check for empty response error
