@@ -589,6 +589,64 @@ class DataProcessor:
         
         return result['success']
     
+    def get_test_feedback(self, predicted: str, ground_truth: str, test_list: List[str] = None) -> str:
+        """
+        Get detailed test execution feedback for the reflector.
+        
+        This method provides the reflector with actual test results and error messages,
+        which is more informative than just comparing generated code with ground truth.
+        The test output is the primary signal for correctness in code generation tasks.
+        
+        Args:
+            predicted: Model's predicted code
+            ground_truth: Ground truth code (reference only, not used for evaluation)
+            test_list: List of test assertions to run
+            
+        Returns:
+            str: Detailed feedback string with test execution results
+        """
+        if test_list is None:
+            return "No test cases provided - cannot evaluate code."
+        
+        # Extract code from response if needed
+        code = extract_code_from_response(predicted)
+        
+        # Execute code with tests
+        result = execute_code_with_tests(code, test_list, timeout=self.timeout)
+        
+        # Build detailed feedback
+        feedback_parts = []
+        
+        if result['success']:
+            feedback_parts.append(f"✓ All {result['total']} tests PASSED")
+            feedback_parts.append("\nTest cases executed successfully:")
+            for i, test in enumerate(test_list, 1):
+                feedback_parts.append(f"  {i}. {test} ✓")
+        else:
+            feedback_parts.append(f"✗ Tests FAILED: {result['passed']}/{result['total']} tests passed")
+            
+            if result['timeout']:
+                feedback_parts.append("\n⏱ TIMEOUT: Code execution exceeded time limit")
+            
+            if result['errors']:
+                feedback_parts.append("\n--- ERROR DETAILS ---")
+                for error in result['errors']:
+                    feedback_parts.append(f"  • {error}")
+            
+            # Show which tests passed vs failed
+            feedback_parts.append("\n--- TEST RESULTS ---")
+            for i, test in enumerate(test_list, 1):
+                # Check if this specific test appears in errors
+                test_failed = any(f"Test {i}" in err for err in result.get('errors', []))
+                status = "✗ FAILED" if test_failed else "✓ passed"
+                feedback_parts.append(f"  {i}. {test} - {status}")
+        
+        # Add extracted code for reference
+        feedback_parts.append("\n--- EXTRACTED CODE ---")
+        feedback_parts.append(code)
+        
+        return "\n".join(feedback_parts)
+    
     def evaluate_accuracy(self, predictions: List[str], ground_truths: List[str], 
                          test_lists: List[List[str]], save_dir: str = None) -> float:
         """

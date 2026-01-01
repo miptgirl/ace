@@ -5,7 +5,12 @@ Analyzes generator outputs and provides feedback on bullet usage.
 
 import json
 from typing import Dict, List, Tuple, Optional, Any
-from ..prompts.reflector import REFLECTOR_PROMPT, REFLECTOR_PROMPT_NO_GT
+from ..prompts.reflector import (
+    REFLECTOR_PROMPT, 
+    REFLECTOR_PROMPT_NO_GT,
+    REFLECTOR_PROMPT_CODE,
+    REFLECTOR_PROMPT_CODE_NO_GT
+)
 from llm import timed_llm_call
 
 
@@ -43,7 +48,8 @@ class Reflector:
         use_ground_truth: bool = True,
         use_json_mode: bool = False,
         call_id: str = "reflect",
-        log_dir: Optional[str] = None
+        log_dir: Optional[str] = None,
+        task_type: Optional[str] = None
     ) -> Tuple[str, List[Dict[str, str]], Dict[str, Any]]:
         """
         Analyze the generator's output and tag bullets.
@@ -59,28 +65,52 @@ class Reflector:
             use_json_mode: Whether to use JSON mode
             call_id: Unique identifier for this call
             log_dir: Directory for logging
+            task_type: Type of task ('coding', etc.) to select specialized prompts
             
         Returns:
             Tuple of (reflection_content, bullet_tags, call_info)
         """
-        # Select the appropriate prompt
-        if use_ground_truth and ground_truth:
-            prompt = REFLECTOR_PROMPT.format(
-                question,
-                reasoning_trace,
-                predicted_answer,
-                ground_truth,
-                environment_feedback,
-                bullets_used
-            )
+        # Select the appropriate prompt based on task type
+        is_coding_task = task_type == 'coding' or (task_type and 'coding' in task_type.lower())
+        
+        if is_coding_task:
+            # Use coding-specific prompts that emphasize test results
+            if use_ground_truth and ground_truth:
+                prompt = REFLECTOR_PROMPT_CODE.format(
+                    question,
+                    reasoning_trace,
+                    predicted_answer,
+                    ground_truth,
+                    environment_feedback,
+                    bullets_used
+                )
+            else:
+                prompt = REFLECTOR_PROMPT_CODE_NO_GT.format(
+                    question,
+                    reasoning_trace,
+                    predicted_answer,
+                    environment_feedback,
+                    bullets_used
+                )
         else:
-            prompt = REFLECTOR_PROMPT_NO_GT.format(
-                question,
-                reasoning_trace,
-                predicted_answer,
-                environment_feedback,
-                bullets_used
-            )
+            # Use default prompts for other tasks
+            if use_ground_truth and ground_truth:
+                prompt = REFLECTOR_PROMPT.format(
+                    question,
+                    reasoning_trace,
+                    predicted_answer,
+                    ground_truth,
+                    environment_feedback,
+                    bullets_used
+                )
+            else:
+                prompt = REFLECTOR_PROMPT_NO_GT.format(
+                    question,
+                    reasoning_trace,
+                    predicted_answer,
+                    environment_feedback,
+                    bullets_used
+                )
         
         response, call_info = timed_llm_call(
             self.api_client,
