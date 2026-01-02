@@ -463,6 +463,7 @@ class ACE:
         token_budget = config_params['token_budget']
         use_json_mode = config_params['use_json_mode']
         no_ground_truth = config_params['no_ground_truth']
+        task_name = config_params.get('task_name', 'default')
         
         # Extract sample data
         question = task_dict.get("question", "")
@@ -470,6 +471,11 @@ class ACE:
         target = task_dict.get("target", "")
         others = task_dict.get("others", {})
         reference_solution = others.get("reference_solution", "")
+        # Get test_list for coding tasks (used for test-based feedback)
+        test_list = others.get("test_list", None)
+        
+        # Check if data_processor supports detailed test feedback
+        has_test_feedback = hasattr(data_processor, 'get_test_feedback') and callable(getattr(data_processor, 'get_test_feedback'))
         
         # STEP 1: Initial generation (pre-train)
         print("Generating initial answer...")
@@ -485,7 +491,11 @@ class ACE:
         
         # Extract answer and check correctness
         final_answer = extract_answer(gen_response)
-        is_correct = data_processor.answer_is_correct(final_answer, target)
+        # Pass test_list for coding tasks if available
+        if test_list is not None:
+            is_correct = data_processor.answer_is_correct(final_answer, target, test_list)
+        else:
+            is_correct = data_processor.answer_is_correct(final_answer, target)
         pre_train_answer = final_answer
         
         print(f"Correct: {is_correct}")
@@ -517,11 +527,22 @@ class ACE:
                     self.playbook, bullet_ids
                 )
                 
-                # Build environment feedback (include reference solution if available)
-                env_feedback = "Predicted answer does not match ground truth."
+                # Build environment feedback
+                # Use detailed test feedback if available (primary signal for code generation)
+                if has_test_feedback and test_list is not None:
+                    # Get detailed test execution results as the main feedback
+                    env_feedback = "--- TEST EXECUTION RESULTS (Primary Signal) ---\n"
+                    env_feedback += data_processor.get_test_feedback(final_answer, target, test_list)
+                    env_feedback += "\n\nThe test results above show exactly why the code failed. "
+                    env_feedback += "Focus on understanding these errors to identify what went wrong."
+                else:
+                    # Fallback to generic feedback for non-coding tasks
+                    env_feedback = "Predicted answer does not match ground truth."
+                
+                # Add reference solution if available
                 if reference_solution:
                     env_feedback += (
-                        f"\n\nHere's the reference solution:\n{reference_solution}\n\n"
+                        f"\n\n--- REFERENCE SOLUTION ---\n{reference_solution}\n\n"
                         f"Think about what takeaways you can learn from this solution to improve "
                         f"future answers and approach to similar problems."
                     )
@@ -537,7 +558,8 @@ class ACE:
                     use_ground_truth=not no_ground_truth,
                     use_json_mode=use_json_mode,
                     call_id=f"{step_id}_round_{round_num}",
-                    log_dir=log_dir
+                    log_dir=log_dir,
+                    task_type=task_name
                 )
                 
                 # Update bullet counts
@@ -559,7 +581,13 @@ class ACE:
                 
                 final_answer = extract_answer(gen_response)
                 
-                if data_processor.answer_is_correct(final_answer, target):
+                # Check correctness (pass test_list for coding tasks)
+                if test_list is not None:
+                    is_now_correct = data_processor.answer_is_correct(final_answer, target, test_list)
+                else:
+                    is_now_correct = data_processor.answer_is_correct(final_answer, target)
+                
+                if is_now_correct:
                     print(f"Corrected after reflection round {round_num + 1}!")
                     is_correct = True
                     break
@@ -570,17 +598,25 @@ class ACE:
                 self.playbook, bullet_ids
             )
             
+            # Build environment feedback for correct answers
+            if has_test_feedback and test_list is not None:
+                env_feedback_correct = "--- TEST EXECUTION RESULTS ---\n"
+                env_feedback_correct += data_processor.get_test_feedback(final_answer, target, test_list)
+            else:
+                env_feedback_correct = "Predicted answer matches ground truth"
+            
             reflection_content, bullet_tags, _ = self.reflector.reflect(
                 question=question,
                 reasoning_trace=gen_response,
                 predicted_answer=final_answer,
                 ground_truth=target if not no_ground_truth else None,
-                environment_feedback="Predicted answer matches ground truth",
+                environment_feedback=env_feedback_correct,
                 bullets_used=playbook_bullets,
                 use_ground_truth=not no_ground_truth,
                 use_json_mode=use_json_mode,
                 call_id=f"{step_id}_reflect_on_correct",
-                log_dir=log_dir
+                log_dir=log_dir,
+                task_type=task_name
             )
             
             # Update bullet counts
@@ -639,7 +675,11 @@ class ACE:
         final_answer = extract_answer(gen_response)
         post_train_answer = final_answer
         
-        post_train_is_correct = data_processor.answer_is_correct(final_answer, target)
+        # Check post-train correctness (pass test_list for coding tasks)
+        if test_list is not None:
+            post_train_is_correct = data_processor.answer_is_correct(final_answer, target, test_list)
+        else:
+            post_train_is_correct = data_processor.answer_is_correct(final_answer, target)
         tracking_dict["post_train_result"] = {
             "final_answer": final_answer,
             "is_correct": post_train_is_correct,

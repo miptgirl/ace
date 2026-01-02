@@ -113,3 +113,119 @@ Your output should be a json object, which contains the following fields
 
 ---
 """
+
+# Coding-specific reflector prompt that emphasizes test execution results
+REFLECTOR_PROMPT_CODE = """You are an expert code reviewer and educator. Your job is to analyze why generated code passed or failed test cases, and identify patterns that lead to correct or incorrect solutions.
+
+**IMPORTANT: Test execution results are the PRIMARY signal for correctness.**
+- The code is correct if and only if ALL tests pass
+- Do NOT compare implementations line-by-line with the reference - different implementations can be equally correct
+- Focus on understanding WHY tests passed or failed based on the code's logic
+
+**Instructions:**
+- First, examine the Test Execution Results to determine if the code is correct
+- If tests FAILED: Analyze what caused the failure (syntax errors, logic errors, edge cases, wrong algorithm)
+- If tests PASSED: Identify what the model did well that led to success
+- The "Possible Implementation" is just ONE way to solve the problem - the model's approach may be different but equally valid
+- Provide actionable insights for improving code generation in the future
+- Tag bulletpoints as helpful/harmful/neutral based on whether they contributed to passing tests
+
+Your output should be a json object, which contains the following fields:
+  - reasoning: analyze the test results and the code's logic, explain why tests passed/failed
+  - error_identification: if tests failed, what specific issue caused the failure? If tests passed, state "No errors - all tests passed"
+  - root_cause_analysis: what underlying concept or pattern led to success or failure?
+  - correct_approach: what coding strategy or pattern should be used for similar problems?
+  - key_insight: what principle should be remembered for future code generation tasks?
+  - bullet_tags: a list of json objects with bullet_id and tag for each bulletpoint
+
+
+
+
+**Question:**
+{}
+
+**Model's Reasoning Trace:**
+{}
+
+**Model's Generated Code:**
+{}
+
+**Possible Implementation (Reference Only - NOT the only correct solution):**
+{}
+
+**Test Execution Results (PRIMARY SIGNAL):**
+{}
+
+**Part of Playbook that's used by the generator to answer the question:**
+{}
+
+**Answer in this exact JSON format:**
+{{
+  "reasoning": "[Analyze test results and code logic - why did tests pass or fail?]",
+  "error_identification": "[What caused test failures? Or 'No errors - all tests passed']",
+  "root_cause_analysis": "[What concept/pattern led to success or failure?]",
+  "correct_approach": "[What coding strategy works for this type of problem?]",
+  "key_insight": "[What principle should be remembered for future code generation?]",
+  "bullet_tags": [
+    {{"id": "code-00001", "tag": "helpful"}},
+    {{"id": "code-00002", "tag": "harmful"}}
+  ]
+}}
+
+---
+"""
+
+REFLECTOR_PROMPT_CODE_NO_GT = """You are an expert code reviewer and educator. Your job is to analyze why generated code passed or failed test cases, and identify patterns that lead to correct or incorrect solutions.
+
+**IMPORTANT: Test execution results are the PRIMARY signal for correctness.**
+- The code is correct if and only if ALL tests pass
+- Focus on understanding WHY tests passed or failed based on the code's logic
+
+**Instructions:**
+- First, examine the Test Execution Results to determine if the code is correct
+- If tests FAILED: Analyze what caused the failure (syntax errors, logic errors, edge cases, wrong algorithm)
+- If tests PASSED: Identify what the model did well that led to success
+- Provide actionable insights for improving code generation in the future
+- Tag bulletpoints as helpful/harmful/neutral based on whether they contributed to passing tests
+
+Your output should be a json object, which contains the following fields:
+  - reasoning: analyze the test results and the code's logic, explain why tests passed/failed
+  - error_identification: if tests failed, what specific issue caused the failure? If tests passed, state "No errors - all tests passed"
+  - root_cause_analysis: what underlying concept or pattern led to success or failure?
+  - correct_approach: what coding strategy or pattern should be used for similar problems?
+  - key_insight: what principle should be remembered for future code generation tasks?
+  - bullet_tags: a list of json objects with bullet_id and tag for each bulletpoint
+
+
+
+
+**Question:**
+{}
+
+**Model's Reasoning Trace:**
+{}
+
+**Model's Generated Code:**
+{}
+
+**Test Execution Results (PRIMARY SIGNAL):**
+{}
+
+**Part of Playbook that's used by the generator to answer the question:**
+{}
+
+**Answer in this exact JSON format:**
+{{
+  "reasoning": "[Analyze test results and code logic - why did tests pass or fail?]",
+  "error_identification": "[What caused test failures? Or 'No errors - all tests passed']",
+  "root_cause_analysis": "[What concept/pattern led to success or failure?]",
+  "correct_approach": "[What coding strategy works for this type of problem?]",
+  "key_insight": "[What principle should be remembered for future code generation?]",
+  "bullet_tags": [
+    {{"id": "code-00001", "tag": "helpful"}},
+    {{"id": "code-00002", "tag": "harmful"}}
+  ]
+}}
+
+---
+"""
